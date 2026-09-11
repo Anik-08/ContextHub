@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets — NEVER commit this
+.env
+
+# Data directories (can be large; regenerate locally)
+chroma_data/
+uploads/
+repos/
+contexthub.db
+
+# Hugging Face / sentence-transformers model cache
+.cache/

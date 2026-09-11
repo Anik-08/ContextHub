@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+.env
+chroma_data
+uploads
+repos
+*.db
+contexthub.db
+test_*.db
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.git
+.gitignore

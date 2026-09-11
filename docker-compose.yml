@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: contexthub_postgres
+    environment:
+      POSTGRES_USER: contexthub
+      POSTGRES_PASSWORD: contexthub
+      POSTGRES_DB: contexthub
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contexthub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    expose:
+      - "5432"
+
+  backend:
+    build: ./backend
+    container_name: contexthub_backend
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:?set GROQ_API_KEY in .env}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.6-27b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      DATABASE_URL: postgresql+psycopg://contexthub:contexthub@postgres:5432/contexthub
+      SECRET_KEY: ${SECRET_KEY:-}
+      CHROMA_PERSIST_DIR: /app/chroma_data
+      UPLOAD_DIR: /app/uploads
+      REPO_DIR: /app/repos
+    volumes:
+      - chroma_data:/app/chroma_data
+      - uploads:/app/uploads
+      - repos:/app/repos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: contexthub_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  chroma_data:
+  uploads:
+  repos:

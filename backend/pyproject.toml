@@ -1,0 +1,23 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "chromadb>=1.5.9",
+    "email-validator>=2.3.0",
+    "fastapi>=0.141.1",
+    "groq>=1.7.0",
+    "langchain-text-splitters>=1.1.2",
+    "psycopg[binary]>=3.3.5",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.13.0",
+    "pymupdf>=1.28.2",
+    "python-dotenv>=1.2.3",
+    "python-multipart>=0.0.32",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=6.0.1",
+    "sqlmodel>=0.0.42",
+    "uvicorn>=0.52.4",
+]

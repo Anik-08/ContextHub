@@ -49,9 +49,14 @@ class Settings(BaseSettings):
     groq_api_key: str
 
     # The model we send to Groq.
-    # llama-3.1-8b-instant → very fast, good quality, generous free tier.
-    # Alternative: llama-3.3-70b-versatile (smarter, slightly slower).
-    groq_model: str = "llama-3.1-8b-instant"
+    # groq/compound-mini — fast, generous free-tier quota, no reasoning overhead.
+    # Alternatives: openai/gpt-oss-20b (reasoning; Groq SDK returns answer cleanly),
+    #               qwen/qwen3.8-27b (requires reasoning_effort="none").
+    groq_model: str = "groq/compound-mini"
+
+    # Max output tokens for LLM calls. Kept well under free-tier OTPM limits
+    # (typically 1000 tokens/min). Set lower to avoid 429 on reasoning models.
+    llm_max_tokens: int = 600
 
     # -----------------------------------------------------------------
     # Embeddings

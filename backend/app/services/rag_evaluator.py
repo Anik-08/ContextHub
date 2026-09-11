@@ -61,12 +61,8 @@ INTERVIEW ANGLE:
 """
 
 import json
-from groq import Groq
 
-from app.config import settings
-
-
-_groq_client = Groq(api_key=settings.groq_api_key)
+from app.services.llm import complete_chat
 
 
 def evaluate_rag_response(
@@ -139,17 +135,13 @@ Respond ONLY with a valid JSON object matching this schema:
 }}"""
 
     try:
-        response = _groq_client.chat.completions.create(
-            model=settings.groq_model,
-            messages=[
-                {"role": "system", "content": "You are an objective AI evaluation judge. Always respond with strict valid JSON."},
-                {"role": "user", "content": eval_prompt},
-            ],
-            temperature=0.0,  # Zero temperature for deterministic evaluation
+        raw_json = complete_chat(
+            system="You are an objective AI evaluation judge. Always respond with strict valid JSON.",
+            user=eval_prompt,
+            temperature=0.0,
             response_format={"type": "json_object"},
-        )
+        ).strip()
 
-        raw_json = response.choices[0].message.content.strip()
         result = json.loads(raw_json)
 
         cr = float(result.get("context_relevance", 0.0))

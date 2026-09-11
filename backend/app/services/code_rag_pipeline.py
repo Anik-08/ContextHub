@@ -13,9 +13,8 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from groq import Groq
-
 from app.config import settings
+from app.services.llm import complete_chat
 from app.services.embedder import embed_texts
 from app.services.git_service import (
     clone_repository,
@@ -39,7 +38,6 @@ from app.services.bm25_indexer import invalidate_bm25_cache
 from app.services.hybrid_retriever import retrieve_code_chunks_v4
 
 
-_groq_client = Groq(api_key=settings.groq_api_key)
 RERANK_THRESHOLD = -5.0
 DENSE_THRESHOLD = 0.25
 
@@ -224,17 +222,13 @@ def query_codebase(
 
     print(f"[CodeQuery] Querying Groq ({settings.groq_model}) with {len(retrieved_chunks)} code snippets...")
 
-    response = _groq_client.chat.completions.create(
-        model=settings.groq_model,
-        messages=[
-            {"role": "system", "content": _get_code_system_prompt()},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.1,
-        max_tokens=800,
+    answer = _sanitize_output(
+        complete_chat(
+            system=_get_code_system_prompt(),
+            user=prompt,
+            temperature=0.1,
+        )
     )
-
-    answer = _sanitize_output(response.choices[0].message.content)
 
     return {
         "answer": answer,
@@ -246,10 +240,25 @@ def query_codebase(
 
 
 def _sanitize_output(text: str) -> str:
-    """Strip <think>...</think> blocks and any leaked reasoning from the model output."""
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL)
-    text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
+    """Strip leaked reasoning / thinking blocks from the model output."""
+    if not text or not text.strip():
+        return text
+
+    # Qwen3-style tag pair: a "thinking" marker line, the reasoning body, then a
+    # closing "answer" marker line. Everything up to the closing marker is
+    # chain-of-thought and must not be surfaced to the user.
+    if re.search(r"^\s*[\[\]`'\"<>]?\s*thinking\b", text, flags=re.IGNORECASE | re.MULTILINE):
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if re.search(r"^\s*[\[\]`'\"<>]?\s*answer\b", line, flags=re.IGNORECASE):
+                text = "\n".join(lines[i + 1:])
+                break
+
+    # HTML-style wrapped reasoning
+    text = re.sub(r"<thinking>.*?</thinking>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<reasoning>.*?</reasoning>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    # OpenAI-style "  thinking\n...\n  response" blocks
+    text = re.sub(r"\s{2,}thinking\b.*?\s{2,}response\b", " ", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(
         r"^(Here's a thinking|Analyze|Scan Context|Extract|Synthesize|Check|Draft|Final Review).*?\n",
         "",

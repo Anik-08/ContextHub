@@ -162,7 +162,7 @@ app.add_middleware(
     # In development: localhost ports. In production: your Vercel frontend domain.
     # NEVER use allow_origins=["*"] in production — it allows any website to call your API.
     allow_origins=[
-        "https://contexthub-app.vercel.app/",
+        o.strip().rstrip("/") for o in settings.cors_origins.split(",") if o.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],   # GET, POST, PUT, DELETE, OPTIONS, etc.

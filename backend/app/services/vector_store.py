@@ -63,8 +63,6 @@ Interview angle:
 
 import socket
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
 from app.config import settings
 
 
@@ -108,6 +106,11 @@ def _preflight_chroma_connection() -> None:
 # anonymized_telemetry=False: opt out of ChromaDB's telemetry data collection.
 # ---------------------------------------------------------------------------
 def get_chroma_client():
+    # chromadb imports onnxruntime (~200MB RSS on first import) — never import
+    # it during app boot. Defer until the first vector operation instead.
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+
     kwargs: dict = {"settings": ChromaSettings(anonymized_telemetry=False)}
     if settings.chroma_host:
         _preflight_chroma_connection()

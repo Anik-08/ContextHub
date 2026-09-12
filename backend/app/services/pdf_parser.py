@@ -41,8 +41,12 @@ Interview angle:
   The parsed text then flows through the same chunking/embedding pipeline.
 """
 
-import pymupdf as fitz  # PyMuPDF — modern import (avoids deprecation warning)
 from pathlib import Path
+
+
+# NOTE: pymupdf (fitz) is imported LAZILY inside each function below, not at
+# module import — importing this module runs during boot, and PyMuPDF's native
+# libraries inflate the 512MB budget unnecessarily.
 
 
 def extract_text_from_pdf(file_path: str | Path) -> list[dict]:
@@ -70,6 +74,8 @@ def extract_text_from_pdf(file_path: str | Path) -> list[dict]:
 
     if not file_path.exists():
         raise FileNotFoundError(f"PDF not found: {file_path}")
+
+    import pymupdf as fitz
 
     # fitz.open() loads the PDF into memory.
     # We use a context manager (with) to ensure the file handle is closed
@@ -118,6 +124,8 @@ def get_pdf_metadata(file_path: str | Path) -> dict:
     without having to re-read the whole file.
     """
     file_path = Path(file_path)
+    import pymupdf as fitz
+
     doc = fitz.open(str(file_path))
 
     with doc:

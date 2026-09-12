@@ -60,7 +60,6 @@ Interview angle:
   Answer: (see above — you now know this cold)
 """
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import settings
 
 
@@ -92,6 +91,11 @@ def chunk_pages(pages: list[dict], document_id: str) -> list[dict]:
     """
     # Instantiate the splitter with our config values.
     # We could also pass in chunk_size/chunk_overlap as params for more flexibility.
+    # NOTE: imported lazily — `langchain_text_splitters` eagerly imports
+    # sentence-transformers/PyTorch at module load, which OOMs 512MB hosts
+    # during boot. It is only needed when a document is actually ingested.
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,

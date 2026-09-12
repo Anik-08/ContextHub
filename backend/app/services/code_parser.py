@@ -52,36 +52,46 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
-from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
-
 from app.config import settings
 
 
-# Mapping of file extensions to LangChain Language enums
-EXTENSION_TO_LANGUAGE: dict[str, Language] = {
-    ".py": Language.PYTHON,
-    ".js": Language.JS,
-    ".jsx": Language.JS,
-    ".ts": Language.TS,
-    ".tsx": Language.TS,
-    ".go": Language.GO,
-    ".rs": Language.RUST,
-    ".java": Language.JAVA,
-    ".cpp": Language.CPP,
-    ".cc": Language.CPP,
-    ".cxx": Language.CPP,
-    ".c": Language.C,
-    ".h": Language.C,
-    ".hpp": Language.CPP,
-    ".cs": Language.CSHARP,
-    ".rb": Language.RUBY,
-    ".php": Language.PHP,
-    ".swift": Language.SWIFT,
-    ".kt": Language.KOTLIN,
-    ".scala": Language.SCALA,
-    ".html": Language.HTML,
-    ".md": Language.MARKDOWN,
-}
+# Mapping of file extensions to LangChain Language enums.
+# Built LAZILY: `langchain_text_splitters` eagerly imports sentence-transformers
+# + PyTorch at module load, which OOMs 512MB hosts during boot. Everything below
+# defers that import until code is actually ingested.
+_EXTENSION_TO_LANGUAGE: dict | None = None
+
+
+def _ext_to_language_mapping():
+    global _EXTENSION_TO_LANGUAGE
+    if _EXTENSION_TO_LANGUAGE is None:
+        from langchain_text_splitters import Language
+
+        _EXTENSION_TO_LANGUAGE = {
+            ".py": Language.PYTHON,
+            ".js": Language.JS,
+            ".jsx": Language.JS,
+            ".ts": Language.TS,
+            ".tsx": Language.TS,
+            ".go": Language.GO,
+            ".rs": Language.RUST,
+            ".java": Language.JAVA,
+            ".cpp": Language.CPP,
+            ".cc": Language.CPP,
+            ".cxx": Language.CPP,
+            ".c": Language.C,
+            ".h": Language.C,
+            ".hpp": Language.CPP,
+            ".cs": Language.CSHARP,
+            ".rb": Language.RUBY,
+            ".php": Language.PHP,
+            ".swift": Language.SWIFT,
+            ".kt": Language.KOTLIN,
+            ".scala": Language.SCALA,
+            ".html": Language.HTML,
+            ".md": Language.MARKDOWN,
+        }
+    return _EXTENSION_TO_LANGUAGE
 
 # Human-readable language name mapping
 EXTENSION_TO_NAME: dict[str, str] = {
@@ -113,9 +123,11 @@ EXTENSION_TO_NAME: dict[str, str] = {
 }
 
 
-def get_language_from_extension(ext: str) -> Optional[Language]:
+def get_language_from_extension(ext: str) -> Optional["Language"]:
     """Return LangChain Language enum if supported."""
-    return EXTENSION_TO_LANGUAGE.get(ext.lower())
+    from langchain_text_splitters import Language
+
+    return _ext_to_language_mapping().get(ext.lower())
 
 
 def get_human_language_name(ext: str) -> str:
@@ -173,6 +185,9 @@ def chunk_source_file(
         return []
 
     # Choose appropriate splitter: language-aware if available, otherwise generic recursive
+    # (imported lazily — see module docstring re: PyTorch boot OOM).
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
     if lang_enum:
         splitter = RecursiveCharacterTextSplitter.from_language(
             language=lang_enum,

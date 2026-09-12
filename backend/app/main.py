@@ -34,6 +34,8 @@ Interview angle:
 
 import logging
 import sys
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -62,6 +64,29 @@ logger = logging.getLogger("contexthub")
 # Lifespan: runs at startup and shutdown
 # ---------------------------------------------------------------------------
 
+def _init_db_background() -> None:
+    """
+    Create/verify the database schema in a background thread, retrying for a
+    while. Supabase (free tier) projects cold-sleep and can take 30-60s to
+    accept connections; doing this synchronously in lifespan blocks uvicorn's
+    "Application startup complete" and the port never answers Render's health
+    scan in time. With it in a daemon thread the app binds + serves instantly,
+    and the schema is ready moments later.
+    """
+    attempts = 20  # ~2 min of retries (6s apart) for a cold Supabase start
+    for attempt in range(1, attempts + 1):
+        try:
+            create_db_and_tables()
+            logger.info("Database tables created/verified.")
+            return
+        except Exception as e:
+            logger.warning(
+                "DB schema init attempt %d/%d failed: %s", attempt, attempts, e
+            )
+            time.sleep(6)
+    logger.error("Database schema init failed after %d attempts.", attempts)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -82,9 +107,9 @@ async def lifespan(app: FastAPI):
     logger.info("Repo dir:     %s", settings.repo_dir)
     logger.info("ChromaDB dir: %s", settings.chroma_persist_dir)
     
-    # Initialize database schema
-    create_db_and_tables()
+    # Initialize database schema in the background — never block boot on it.
     logger.info("Database:     %s", settings.database_url)
+    threading.Thread(target=_init_db_background, daemon=True).start()
     
     # Validate Groq API key is present
     if not settings.groq_api_key:

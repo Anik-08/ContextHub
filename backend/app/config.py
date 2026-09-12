@@ -12,7 +12,8 @@ Interview angle:
   In production you'd use a secrets manager (AWS Secrets Manager, HashiCorp Vault).
 """
 
-from pydantic import Field
+from typing import Optional
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import secrets
 
@@ -40,6 +41,17 @@ class Settings(BaseSettings):
     # If DATABASE_URL is set (e.g. postgresql://user:pass@host/db) it wins.
     # Otherwise we fall back to local SQLite for zero-setup development.
     database_url: str = "sqlite:///./contexthub.db"
+
+    # -----------------------------------------------------------------
+    # CORS
+    # -----------------------------------------------------------------
+    # Comma-separated list of allowed browser origins (the frontend).
+    # In production set this to your Vercel/Next.js frontend URL, e.g.:
+    #   CORS_ORIGINS=https://contexthub.vercel.app,https://contexthub-xyz.vercel.app
+    cors_origins: str = (
+        "http://localhost:3000,http://localhost:3001,"
+        "http://127.0.0.1:3000,http://127.0.0.1:3001"
+    )
 
     # -----------------------------------------------------------------
     # LLM — Groq
@@ -96,6 +108,23 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     repo_dir: str = "./repos"
 
+    # -----------------------------------------------------------------
+    # Vector DB — ChromaDB connection mode
+    # -----------------------------------------------------------------
+    # Local mode (default): PersistentClient writes to chroma_persist_dir on
+    # local disk. Perfect for docker-compose / dev.
+    #
+    # Remote mode: set CHROMA_HOST to point at a hosted Chroma instance
+    # (e.g. Chroma Cloud or a self-hosted chroma server). Required on hosts
+    # with ephemeral disks (Render free tier) where local data is wiped.
+    #   CHROMA_HOST=xxx.chroma.app   CHROMA_PORT=8000
+    #   CHROMA_SSL=true              CHROMA_API_KEY=<token>
+    chroma_host: Optional[str] = None
+    chroma_port: int = 8000
+    chroma_ssl: bool = False
+    # Optional auth header (Chroma Cloud uses X-Chroma-Token).
+    chroma_api_key: Optional[str] = None
+
     # Backward-compatible alias: pydantic-settings default for the DB path.
     db_path: str = "sqlite:///./contexthub.db"
 
@@ -113,6 +142,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",  # don't crash on unknown env vars
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        """
+        Coerce bare Postgres URLs to use the psycopg (v3) SQLAlchemy dialect,
+        which is the driver we install. SQLAlchemy otherwise assumes psycopg2
+        (not installed) for a plain `postgresql://` URL.
+        """
+        if v.startswith("postgres://") or v.startswith("postgresql://"):
+            if not any(prefix in v for prefix in ("+psycopg", "+psycopg2", "+pg8000")):
+                return v.replace(
+                    "postgresql://", "postgresql+psycopg://", 1
+                ).replace("postgres://", "postgresql+psycopg://", 1)
+        return v
 
 
 # Singleton: import this object everywhere instead of instantiating Settings() repeatedly.

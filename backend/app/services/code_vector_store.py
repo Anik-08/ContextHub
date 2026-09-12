@@ -38,19 +38,14 @@ INTERVIEW ANGLE:
     combining dense semantic vectors with sparse BM25 keyword matching.
 """
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-
-from app.config import settings
+from app.services.vector_store import get_chroma_client
 
 
 CODE_COLLECTION_NAME = "contexthub_code"
 
-# PersistentClient sharing the same storage root
-_client = chromadb.PersistentClient(
-    path=settings.chroma_persist_dir,
-    settings=ChromaSettings(anonymized_telemetry=False),
-)
+# Shares the same client factory as the document store, so remote Chroma
+# (CHROMA_HOST set) is used consistently across both collections.
+_client = get_chroma_client()
 
 
 def get_code_collection():

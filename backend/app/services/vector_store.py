@@ -73,16 +73,37 @@ COLLECTION_NAME = "contexthub_documents"
 
 
 # ---------------------------------------------------------------------------
-# ChromaDB client — singleton
-# ---------------------------------------------------------------------------
-# PersistentClient: writes data to disk at chroma_persist_dir.
-# Data survives server restarts. Without persistence, everything is in-memory only.
+# ChromaDB client factory — supports local (PersistentClient) AND remote
+# (HttpClient, e.g. Chroma Cloud / self-hosted chroma server).
+#
+# Local mode: writes to disk at chroma_persist_dir. Data survives restarts.
+# Remote mode (CHROMA_HOST set): connects to a hosted Chroma instance — the
+# data lives on the host's disk, which is what you want on ephemeral
+# platforms like Render's free tier.
 #
 # anonymized_telemetry=False: opt out of ChromaDB's telemetry data collection.
-_client = chromadb.PersistentClient(
-    path=settings.chroma_persist_dir,
-    settings=ChromaSettings(anonymized_telemetry=False),
-)
+# ---------------------------------------------------------------------------
+def get_chroma_client():
+    kwargs: dict = {"settings": ChromaSettings(anonymized_telemetry=False)}
+    if settings.chroma_host:
+        kwargs.update(
+            host=settings.chroma_host,
+            port=settings.chroma_port,
+            ssl=settings.chroma_ssl,
+        )
+        if settings.chroma_api_key:
+            # Chroma Cloud authenticates with an X-Chroma-Token header.
+            kwargs.setdefault("headers", {}).update(
+                {"X-Chroma-Token": settings.chroma_api_key}
+            )
+        return chromadb.HttpClient(**kwargs)
+    return chromadb.PersistentClient(
+        path=settings.chroma_persist_dir,
+        **kwargs,
+    )
+
+
+_client = get_chroma_client()
 
 
 def get_collection():

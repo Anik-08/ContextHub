@@ -117,13 +117,18 @@ class Settings(BaseSettings):
     # Remote mode: set CHROMA_HOST to point at a hosted Chroma instance
     # (e.g. Chroma Cloud or a self-hosted chroma server). Required on hosts
     # with ephemeral disks (Render free tier) where local data is wiped.
-    #   CHROMA_HOST=xxx.chroma.app   CHROMA_PORT=8000
-    #   CHROMA_SSL=true              CHROMA_API_KEY=<token>
+    #   CHROMA_HOST=xxxxx.chroma.app (or ...trychroma.com)
+    #   CHROMA_PORT=8000  (always 8000 with ssl=true for Chroma Cloud)
+    #   CHROMA_SSL=true
+    #   CHROMA_API_KEY=<token>            (Chroma Cloud uses X-Chroma-Token)
+    #   CHROMA_TENANT=default-tenant      (optional; Chroma Cloud may assign one)
+    #   CHROMA_DATABASE=default_database  (optional)
     chroma_host: Optional[str] = None
     chroma_port: int = 8000
     chroma_ssl: bool = False
-    # Optional auth header (Chroma Cloud uses X-Chroma-Token).
     chroma_api_key: Optional[str] = None
+    chroma_tenant: Optional[str] = None
+    chroma_database: Optional[str] = None
 
     # Backward-compatible alias: pydantic-settings default for the DB path.
     db_path: str = "sqlite:///./contexthub.db"

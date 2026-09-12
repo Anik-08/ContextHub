@@ -96,6 +96,10 @@ def get_chroma_client():
             kwargs.setdefault("headers", {}).update(
                 {"X-Chroma-Token": settings.chroma_api_key}
             )
+        if settings.chroma_tenant:
+            kwargs["tenant"] = settings.chroma_tenant
+        if settings.chroma_database:
+            kwargs["database"] = settings.chroma_database
         return chromadb.HttpClient(**kwargs)
     return chromadb.PersistentClient(
         path=settings.chroma_persist_dir,

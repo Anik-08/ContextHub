@@ -61,6 +61,8 @@ Interview angle:
   replaced at that scale. The chunking and embedding pipeline stays the same.
 """
 
+import socket
+
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from app.config import settings
@@ -72,20 +74,43 @@ from app.config import settings
 COLLECTION_NAME = "contexthub_documents"
 
 
+def _preflight_chroma_connection() -> None:
+    """
+    Fail fast (instead of hanging) when the remote Chroma server is unreachable.
+
+    chromadb.HttpClient() performs a live request inside its constructor, so a
+    misconfigured/silently-dropped endpoint stalls the process for minutes.
+    We probe the TCP port with a short timeout first and raise a clear error.
+    """
+    if not settings.chroma_host:
+        return
+    try:
+        with socket.create_connection(
+            (settings.chroma_host, settings.chroma_port), timeout=5
+        ):
+            pass
+    except Exception as e:
+        raise ConnectionError(
+            f"Cannot reach ChromaDB at {settings.chroma_host}:{settings.chroma_port} "
+            f"({e}). Check CHROMA_HOST / CHROMA_PORT / CHROMA_SSL variables."
+        ) from e
+
+
 # ---------------------------------------------------------------------------
 # ChromaDB client factory — supports local (PersistentClient) AND remote
 # (HttpClient, e.g. Chroma Cloud / self-hosted chroma server).
 #
-# Local mode: writes to disk at chroma_persist_dir. Data survives restarts.
-# Remote mode (CHROMA_HOST set): connects to a hosted Chroma instance — the
-# data lives on the host's disk, which is what you want on ephemeral
-# platforms like Render's free tier.
+# IMPORTANT: the client is built LAZILY (on first vector operation), never at
+# module import. chromadb.HttpClient() connects to the server in its
+# constructor, so connecting at import time stalls app boot on low-connectivity /
+# slow hosts — which looks like "no open ports detected" on Render.
 #
 # anonymized_telemetry=False: opt out of ChromaDB's telemetry data collection.
 # ---------------------------------------------------------------------------
 def get_chroma_client():
     kwargs: dict = {"settings": ChromaSettings(anonymized_telemetry=False)}
     if settings.chroma_host:
+        _preflight_chroma_connection()
         kwargs.update(
             host=settings.chroma_host,
             port=settings.chroma_port,
@@ -107,7 +132,15 @@ def get_chroma_client():
     )
 
 
-_client = get_chroma_client()
+_client: object | None = None
+
+
+def get_client():
+    """Return the ChromaDB client, constructing it lazily on first use."""
+    global _client
+    if _client is None:
+        _client = get_chroma_client()
+    return _client
 
 
 def get_collection():
@@ -121,7 +154,7 @@ def get_collection():
     metadata={"hnsw:space": "cosine"}: tells the HNSW index to use cosine distance.
     This must be set at collection creation time — you can't change it later.
     """
-    return _client.get_or_create_collection(
+    return get_client().get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},  # use cosine similarity, not L2
     )

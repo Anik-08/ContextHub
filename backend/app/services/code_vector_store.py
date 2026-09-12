@@ -38,22 +38,20 @@ INTERVIEW ANGLE:
     combining dense semantic vectors with sparse BM25 keyword matching.
 """
 
-from app.services.vector_store import get_chroma_client
+from app.services.vector_store import get_client
 
 
 CODE_COLLECTION_NAME = "contexthub_code"
 
 # Shares the same client factory as the document store, so remote Chroma
-# (CHROMA_HOST set) is used consistently across both collections.
-_client = get_chroma_client()
-
-
+# (CHROMA_HOST set) is used consistently across both collections. The client
+# is constructed lazily on first use to avoid blocking app boot on connection.
 def get_code_collection():
     """
     Get or create the code vector collection.
     Configured with cosine distance metric for normalized semantic similarity.
     """
-    return _client.get_or_create_collection(
+    return get_client().get_or_create_collection(
         name=CODE_COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
     )

@@ -50,23 +50,26 @@ INTERVIEW ANGLE:
 """
 
 from typing import Optional
-from sentence_transformers import CrossEncoder
 
 
 # Model name for fast CPU passage reranking
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-_reranker: Optional[CrossEncoder] = None
+_reranker: Optional[object] = None
 
 
-def get_reranker() -> Optional[CrossEncoder]:
+def get_reranker():
     """
     Lazy load CrossEncoder singleton.
-    Lazy loading ensures the app starts quickly and only loads the model on demand.
+    The `sentence_transformers` import is deferred too: it pulls in PyTorch
+    (~200MB RSS) which would OOM low-memory hosts (e.g. Render free tier)
+    at bootstrap — this module is imported by the regular app import chain.
     """
     global _reranker
     if _reranker is None:
         try:
+            from sentence_transformers import CrossEncoder
+
             print(f"[Reranker] Loading CrossEncoder model: {RERANKER_MODEL_NAME}...")
             _reranker = CrossEncoder(RERANKER_MODEL_NAME, max_length=512)
             print("[Reranker] CrossEncoder model loaded successfully.")

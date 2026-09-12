@@ -52,7 +52,7 @@ export default function QueryPage() {
   const [pathFilter, setPathFilter] = useState("");
   const topK = 5;
   const [searchMode, setSearchMode] = useState<SearchMode>("hybrid");
-  const [enableRerank, setEnableRerank] = useState(true);
+  const [enableRerank, setEnableRerank] = useState(false);
 
   const loadOptions = useCallback(async () => {
     try {

@@ -64,22 +64,29 @@ Interview angle:
   The geometry of the overall space is what encodes meaning.
 """
 
-from sentence_transformers import SentenceTransformer
 from app.config import settings
 
 
 # ---------------------------------------------------------------------------
-# Singleton model loading
+# Lazy singleton model loading
 # ---------------------------------------------------------------------------
-# This runs once when the module is first imported.
-# After the first import, Python caches the module — subsequent imports
-# reuse the already-loaded model object. No repeated disk reads.
-#
-# In production: you'd load the model during app startup (FastAPI lifespan event)
-# and store it in app.state. V1: module-level singleton is fine.
-print(f"Loading embedding model: {settings.embedding_model}...")
-_model = SentenceTransformer(settings.embedding_model)
-print("Embedding model loaded.")
+# The model is loaded on FIRST USE, not at module import. Importing this module
+# must stay cheap: sentence-transformers pulls in PyTorch (~200MB+ RSS), which
+# would OOM low-memory hosts (e.g. Render free tier, 512MB) at boot time.
+# After the first call the module-level cache is reused for every request.
+_model = None
+
+
+def get_embedding_model():
+    """Load the sentence-transformer model on demand and return the cached instance."""
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+
+        print(f"Loading embedding model: {settings.embedding_model}...")
+        _model = SentenceTransformer(settings.embedding_model)
+        print("Embedding model loaded.")
+    return _model
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +119,8 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     # encode() returns a numpy array of shape (len(texts), embedding_dim).
     # .tolist() converts it to a plain Python list of lists — required by ChromaDB.
     # show_progress_bar=False: don't print progress for every API request (noisy).
-    embeddings = _model.encode(texts, show_progress_bar=False)
+    model = get_embedding_model()
+    embeddings = model.encode(texts, show_progress_bar=False)
     return embeddings.tolist()
 
 
@@ -133,7 +141,8 @@ def embed_query(query: str) -> list[float]:
         A single embedding vector (list of floats).
     """
     # encode() handles a single string too — returns shape (embedding_dim,).
-    embedding = _model.encode(query, show_progress_bar=False)
+    model = get_embedding_model()
+    embedding = model.encode(query, show_progress_bar=False)
     return embedding.tolist()
 
 
@@ -146,5 +155,6 @@ def get_embedding_dimension() -> int:
     If we switch embedding models, this automatically returns the right value.
     """
     # Embed a dummy string and measure its length
-    dummy = _model.encode("test")
+    model = get_embedding_model()
+    dummy = model.encode("test")
     return len(dummy)

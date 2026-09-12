@@ -30,7 +30,7 @@ export default function EvaluatePage() {
   const [documentId, setDocumentId] = useState("");
   const [repoId, setRepoId] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("hybrid");
-  const [enableRerank, setEnableRerank] = useState(true);
+  const [enableRerank, setEnableRerank] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

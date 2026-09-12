@@ -39,6 +39,10 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Early boot marker — printed before any heavy import so deploy logs show us
+# exactly how far the process gets (Render captures this immediately).
+print("BOOT: importing app.main ...", flush=True)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

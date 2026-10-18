@@ -1,18 +1,3 @@
-"""
-auth.py — Authentication routes: register, login, and current-user.
-
-ENDPOINTS:
-  - POST /api/auth/register  → create account, return token + user
-  - POST /api/auth/login     → verify credentials, return token + user
-  - GET  /api/auth/me        → current user (protected example endpoint)
-
-WHY RETURN THE TOKEN ON REGISTER/LOGIN:
-  Stateless JWT flow: the client logs in once, gets a signed token, and sends
-  it with every subsequent request. The server never stores session state.
-  The frontend keeps this token (in memory / localStorage) and attaches it to
-  the Authorization header — which our get_current_user dependency validates.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, EmailStr
 
@@ -24,10 +9,6 @@ from app.services.auth_deps import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-
-# ---------------------------------------------------------------------------
-# Request / Response schemas for the auth flow
-# ---------------------------------------------------------------------------
 
 class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., description="User email (unique).")
@@ -41,7 +22,6 @@ class LoginRequest(BaseModel):
 
 
 class UserOut(BaseModel):
-    """Public user fields — never send password_hash to the client."""
     user_id: str
     email: str
     name: str | None
@@ -67,10 +47,6 @@ def _auth_payload(user: User) -> AuthResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 @router.post(
     "/register",
     response_model=AuthResponse,
@@ -92,7 +68,6 @@ async def register(request: RegisterRequest) -> AuthResponse:
 )
 async def login(request: LoginRequest) -> AuthResponse:
     user = get_user_by_email(request.email)
-    # Same error for "no user" and "wrong password" — don't leak which emails exist.
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

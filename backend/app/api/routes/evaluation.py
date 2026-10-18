@@ -1,26 +1,3 @@
-"""
-evaluation.py — API route for quantitative RAG Triad benchmarking.
-
-ENDPOINT: POST /api/evaluate
-
-WHAT THIS ENDPOINT DOES:
-  Executes a query through the ContextHub RAG pipeline (documents or code),
-  extracts the retrieved context and generated answer, and runs an objective
-  LLM-as-a-Judge evaluation measuring:
-    1. Context Relevance (Did retrieval find the right information?)
-    2. Faithfulness / Groundedness (Did the answer avoid hallucinations?)
-    3. Answer Relevance (Did the response actually address the question?)
-
-WHY THIS IS ESSENTIAL FOR AN AI ENGINEER PORTFOLIO:
-  Anyone can build a basic toy RAG script.
-  A professional AI Engineer builds:
-    - Observability and evaluation metrics.
-    - Automated regression benchmarks.
-    - Hallucination detection guardrails.
-  This endpoint allows developers and hiring managers to submit test questions
-  and see transparent, quantitative quality scores in real time.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.schemas import EvaluationRequest, EvaluationResponse
@@ -50,7 +27,6 @@ async def evaluate_query_endpoint(
     request: EvaluationRequest,
     user: User = Depends(get_current_user),
 ) -> EvaluationResponse:
-    # Multi-tenant ownership checks before running anything.
     if request.document_id and not get_document_by_id(request.document_id, user.user_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -63,7 +39,6 @@ async def evaluate_query_endpoint(
         )
 
     try:
-        # Determine whether this is a code query or document query
         if request.repo_id:
             rag_output = query_codebase(
                 question=request.question,
@@ -91,8 +66,6 @@ async def evaluate_query_endpoint(
     answer = rag_output.get("answer", "")
     context = rag_output.get("context", "")
     sources = rag_output.get("sources", [])
-
-    # If guardrail stopped generation due to irrelevance, score accordingly
     if not context or not sources:
         return EvaluationResponse(
             question=request.question,
@@ -107,13 +80,11 @@ async def evaluate_query_endpoint(
             retrieved_sources_count=0,
         )
 
-    # Run RAG Triad evaluation
     eval_result = evaluate_rag_response(
         question=request.question,
         context=context,
         answer=answer,
     )
-
     return EvaluationResponse(
         question=request.question,
         answer=answer,

@@ -44,7 +44,6 @@ export default function QueryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // filter options
   const [documents, setDocuments] = useState<{ id: string; name: string }[]>([]);
   const [repos, setRepos] = useState<{ id: string; name: string; lang: string | null }[]>([]);
   const [documentId, setDocumentId] = useState<string>("");
@@ -69,7 +68,6 @@ export default function QueryPage() {
         })),
       );
     } catch {
-      // options load lazily in the background; the query call will surface errors
     }
   }, [token]);
 

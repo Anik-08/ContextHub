@@ -1,58 +1,9 @@
-"""
-schemas.py — Pydantic models defining the API contracts (requests and responses).
-
-WHAT WE ARE BUILDING:
-  We are expanding our Pydantic schemas to support V2 features:
-    - Document listing (GET /api/documents)
-    - Document deletion response (DELETE /api/documents/{id})
-    - Document deduplication signal on upload response
-    - Filtered querying by document_id (POST /api/query)
-
-WHY WE NEED IT:
-  APIs require strict boundaries. Clients (like Next.js frontend or curl) need
-  predictable JSON shapes, type guarantees, and clear status responses.
-  Pydantic ensures:
-    - Invalid data from clients is rejected early with HTTP 422.
-    - Outgoing data is cleanly serialized (e.g. converting Python datetime to ISO-8601 strings).
-    - Swagger/OpenAPI documentation (/docs) is automatically generated.
-
-DATA FLOW:
-  Client Request (JSON)
-       │
-       ▼
-  FastAPI parses & validates against Pydantic Request Model
-       │
-       ▼
-  Internal Services / Database (SQLModel / ChromaDB)
-       │
-       ▼
-  FastAPI maps results into Pydantic Response Model
-       │
-       ▼
-  Client receives validated JSON
-
-INTERVIEW ANGLE:
-  "Why separate database models (SQLModel) from API schemas (Pydantic)?"
-  Answer: Even though SQLModel inherits from Pydantic, separating the public API
-  schemas from internal database representations provides decoupling. For example,
-  you might not want to expose sensitive internal fields (like internal storage paths,
-  raw hashes, or soft-delete flags) in every API response. It also allows the database
-  schema and API versioning to evolve independently.
-"""
-
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 
 
-# ---------------------------------------------------------------------------
-# Document Models
-# ---------------------------------------------------------------------------
-
 class DocumentRecord(BaseModel):
-    """
-    Representation of an ingested document for listing and inspection.
-    """
     document_id: str
     filename: str
     file_hash: str
@@ -65,21 +16,11 @@ class DocumentRecord(BaseModel):
 
 
 class DocumentListResponse(BaseModel):
-    """
-    Response returned by GET /api/documents.
-    Contains the list of registered documents and total count.
-    """
     documents: list[DocumentRecord]
     total: int
 
 
 class DocumentUploadResponse(BaseModel):
-    """
-    Returned after a PDF upload.
-    
-    already_existed: True if SHA-256 deduplication caught an existing file,
-                     skipping redundant chunking and embedding.
-    """
     document_id: str
     filename: str
     chunk_count: int
@@ -87,22 +28,17 @@ class DocumentUploadResponse(BaseModel):
     message: str
 
 
+class BlobIngestRequest(BaseModel):
+    blob_url: str = Field(..., description="Vercel Blob URL of the uploaded file.")
+    filename: str = Field(..., description="Original filename (used for metadata/citations).")
+
+
 class DeleteDocumentResponse(BaseModel):
-    """
-    Returned after deleting a document and its vector chunks.
-    """
     document_id: str
     message: str
 
 
-# ---------------------------------------------------------------------------
-# Query Models
-# ---------------------------------------------------------------------------
-
 class QueryRequest(BaseModel):
-    """
-    Request body for asking questions.
-    """
     question: str = Field(
         ...,
         min_length=3,
@@ -130,9 +66,6 @@ class QueryRequest(BaseModel):
 
 
 class SourceChunk(BaseModel):
-    """
-    A single retrieved chunk cited as evidence for the LLM's answer.
-    """
     content: str
     page_number: int
     document_id: str
@@ -144,22 +77,12 @@ class SourceChunk(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    """
-    Full grounded response from the RAG pipeline.
-    """
     answer: str
     sources: list[SourceChunk]
     question: str
 
 
-# ---------------------------------------------------------------------------
-# Codebase RAG Models (V3 & V4)
-# ---------------------------------------------------------------------------
-
 class RepoIngestGitRequest(BaseModel):
-    """
-    Request to clone and index a Git repository from a public URL.
-    """
     git_url: str = Field(
         ...,
         description="Public Git repository URL (HTTPS).",
@@ -172,9 +95,6 @@ class RepoIngestGitRequest(BaseModel):
 
 
 class RepoResponse(BaseModel):
-    """
-    Represents an indexed repository record.
-    """
     repo_id: str
     name: str
     clone_url: Optional[str] = None
@@ -187,25 +107,16 @@ class RepoResponse(BaseModel):
 
 
 class RepoListResponse(BaseModel):
-    """
-    Response listing all indexed repositories.
-    """
     repos: list[RepoResponse]
     total: int
 
 
 class DeleteRepoResponse(BaseModel):
-    """
-    Confirmation of repository deletion.
-    """
     repo_id: str
     message: str
 
 
 class CodeSourceChunk(BaseModel):
-    """
-    Source code snippet returned as evidence for an answer.
-    """
     content: str
     file_path: str
     start_line: int
@@ -219,9 +130,6 @@ class CodeSourceChunk(BaseModel):
 
 
 class CodeQueryRequest(BaseModel):
-    """
-    Request for asking code intelligence questions.
-    """
     question: str = Field(
         ...,
         min_length=3,
@@ -253,23 +161,13 @@ class CodeQueryRequest(BaseModel):
 
 
 class CodeQueryResponse(BaseModel):
-    """
-    Answer to a code question with file and line range citations.
-    """
     answer: str
     sources: list[CodeSourceChunk]
     question: str
     repo_id: str
 
 
-# ---------------------------------------------------------------------------
-# Evaluation Models (V4)
-# ---------------------------------------------------------------------------
-
 class EvaluationRequest(BaseModel):
-    """
-    Request to run an automated RAG Triad benchmark evaluation.
-    """
     question: str = Field(
         ...,
         description="The test question to evaluate.",
@@ -294,9 +192,6 @@ class EvaluationRequest(BaseModel):
 
 
 class EvaluationResponse(BaseModel):
-    """
-    Quantitative benchmark result across the RAG Triad.
-    """
     question: str
     answer: str
     context_relevance_score: float = Field(
@@ -319,5 +214,3 @@ class EvaluationResponse(BaseModel):
         description="Average Triad score across all three dimensions.",
     )
     retrieved_sources_count: int
-
-

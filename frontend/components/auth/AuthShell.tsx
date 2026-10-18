@@ -30,7 +30,6 @@ export function AuthShell({
 }) {
   return (
     <div className="flex min-h-full flex-1">
-      {/* Brand panel — hidden on small screens */}
       <div className="relative hidden w-[44%] overflow-hidden bg-zinc-950 lg:block">
         <div className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-violet-600/20 blur-3xl" />
@@ -70,7 +69,6 @@ export function AuthShell({
         </div>
       </div>
 
-      {/* Form column */}
       <div className="relative flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-12 lg:bg-zinc-900/30">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-indigo-500/10 to-transparent" />
         <div className="relative w-full max-w-sm">

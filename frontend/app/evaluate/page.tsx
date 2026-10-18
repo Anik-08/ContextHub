@@ -50,9 +50,7 @@ export default function EvaluatePage() {
         );
         setRepos(repoData.repos.map((r) => ({ id: r.repo_id, name: r.name })));
       })
-      .catch(() => {
-        // surfaced by the run call
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };

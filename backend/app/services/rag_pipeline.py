@@ -1,13 +1,3 @@
-"""
-rag_pipeline.py — Orchestrates the document RAG pipeline with V4 Advanced Retrieval.
-
-V4 ENHANCEMENTS:
-  - Hybrid Retrieval: Dense vector search + BM25 sparse keyword search fused with RRF.
-  - Two-Stage Cross-Encoder Reranking for high-precision context selection.
-  - Configurable search modes: 'hybrid', 'dense', 'sparse'.
-  - Relevance guardrails: Out-of-domain / irrelevant questions are gracefully refused.
-"""
-
 import re
 import uuid
 from pathlib import Path
@@ -28,24 +18,14 @@ from app.services.bm25_indexer import invalidate_bm25_cache
 from app.services.hybrid_retriever import retrieve_document_chunks_v4
 
 
-# Minimum acceptable rerank score for cross-encoder (logits).
-# For ms-marco-MiniLM-L-6-v2, scores below -5.0 generally mean completely irrelevant.
 RERANK_THRESHOLD = -5.0
 DENSE_THRESHOLD = 0.25
 
 
 def ingest_pdf(file_path: str | Path, filename: str, owner_id: str) -> dict:
-    """
-    Ingest a PDF file into the document registry, ChromaDB, and invalidate BM25 cache.
-
-    owner_id (V5): the uploading user. Dedup is scoped per-owner, and the
-    registry record is tagged with this owner for multi-tenant access control.
-    """
     file_path = Path(file_path)
-
     print(f"[Ingest] Hashing file '{filename}'...")
     file_hash = hash_file(file_path)
-
     existing = get_document_by_hash(file_hash, owner_id)
     if existing:
         print(f"[Ingest] Duplicate detected. Reusing existing document ID '{existing.document_id}'.")
@@ -59,25 +39,18 @@ def ingest_pdf(file_path: str | Path, filename: str, owner_id: str) -> dict:
     print(f"[Ingest] Extracting text from '{filename}'...")
     pages = extract_text_from_pdf(file_path)
     print(f"[Ingest] Extracted {len(pages)} pages.")
-
     pdf_meta = get_pdf_metadata(file_path)
-
     document_id = str(uuid.uuid4())
     print(f"[Ingest] Chunking pages...")
     chunks = chunk_pages(pages, document_id=document_id)
     print(f"[Ingest] Created {len(chunks)} chunks.")
-
     print(f"[Ingest] Generating embeddings for {len(chunks)} chunks...")
     chunk_texts = [chunk["text"] for chunk in chunks]
     embeddings = embed_texts(chunk_texts)
-
     print(f"[Ingest] Storing in ChromaDB...")
     stored_count = add_chunks(chunks, embeddings)
-
-    # Invalidate cached BM25 index so new chunks are reflected
     invalidate_bm25_cache(f"doc:{document_id}")
     invalidate_bm25_cache("doc:all")
-
     print(f"[Ingest] Saving document record to registry...")
     create_document(
         document_id=document_id,
@@ -91,7 +64,6 @@ def ingest_pdf(file_path: str | Path, filename: str, owner_id: str) -> dict:
         author=pdf_meta.get("author", ""),
     )
     print(f"[Ingest] Ingestion complete for '{filename}'.")
-
     return {
         "document_id": document_id,
         "filename": filename,
@@ -101,9 +73,6 @@ def ingest_pdf(file_path: str | Path, filename: str, owner_id: str) -> dict:
 
 
 def delete_document_from_stores(document_id: str) -> None:
-    """
-    Purge document chunks from vector store and clear BM25 cache.
-    """
     print(f"[Delete] Removing ChromaDB chunks for document '{document_id}'...")
     delete_document_chunks(document_id)
     invalidate_bm25_cache(f"doc:{document_id}")
@@ -118,15 +87,9 @@ def query_rag(
     search_mode: str = "hybrid",
     enable_rerank: bool = True,
 ) -> dict:
-    """
-    Advanced RAG query pipeline using Hybrid Retrieval + Reranking.
-    """
     k = top_k or settings.top_k_results
-
     scope = f"document '{document_id}'" if document_id else "all documents"
     print(f"[Query] Retrieving chunks ({search_mode=}, {enable_rerank=}) for: '{question}' from {scope}...")
-
-    # Stage 1 + Stage 2: Advanced retrieval via hybrid_retriever
     retrieved_chunks = retrieve_document_chunks_v4(
         query=question,
         top_k=k,
@@ -135,7 +98,6 @@ def query_rag(
         enable_rerank=enable_rerank,
     )
     print(f"[Query] Retrieved {len(retrieved_chunks)} relevant chunks.")
-
     if not retrieved_chunks:
         return {
             "answer": "No relevant documents or text were found matching your query.",
@@ -143,7 +105,6 @@ def query_rag(
             "question": question,
         }
 
-    # Relevance Guardrail: Rejection of out-of-domain questions
     top_chunk = retrieved_chunks[0]
     if enable_rerank and "rerank_score" in top_chunk:
         if top_chunk["rerank_score"] < RERANK_THRESHOLD:
@@ -169,9 +130,7 @@ def query_rag(
 
     context_block = _build_context_block(retrieved_chunks)
     prompt = _build_user_prompt(question, context_block)
-
     print(f"[Query] Calling Groq ({settings.groq_model}) with {len(retrieved_chunks)} context chunks...")
-
     answer = _sanitize_output(
         complete_chat(
             system=_get_system_prompt(),
@@ -179,7 +138,6 @@ def query_rag(
             temperature=0.1,
         )
     )
-
     return {
         "answer": answer,
         "sources": retrieved_chunks,
@@ -188,13 +146,9 @@ def query_rag(
 
 
 def _sanitize_output(text: str) -> str:
-    """Strip leaked reasoning / thinking blocks from the model output."""
     if not text or not text.strip():
         return text
 
-    # Qwen3-style tag pair: a "thinking" marker line, the reasoning body, then a
-    # closing "answer" marker line. Everything up to the closing marker is
-    # chain-of-thought and must not be surfaced to the user.
     if re.search(r"^\s*[\[\]`'\"<>]?\s*thinking\b", text, flags=re.IGNORECASE | re.MULTILINE):
         lines = text.splitlines()
         for i, line in enumerate(lines):
@@ -202,12 +156,9 @@ def _sanitize_output(text: str) -> str:
                 text = "\n".join(lines[i + 1:])
                 break
 
-    # HTML-style wrapped reasoning
     text = re.sub(r"<thinking>.*?</thinking>", " ", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<reasoning>.*?</reasoning>", " ", text, flags=re.DOTALL | re.IGNORECASE)
-    # OpenAI-style "  thinking\n...\n  response" blocks
     text = re.sub(r"\s{2,}thinking\b.*?\s{2,}response\b", " ", text, flags=re.DOTALL | re.IGNORECASE)
-    # Remove common leaked reasoning prefixes
     text = re.sub(
         r"^(Here's a thinking|Analyze|Scan Context|Extract|Synthesize|Check|Draft|Final Review).*?\n",
         "",

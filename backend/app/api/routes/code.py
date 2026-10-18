@@ -1,27 +1,12 @@
-"""
-code.py — API routes for Codebase Intelligence (Git ingestion, Zip upload, Listing, Querying).
-
-ENDPOINTS:
-  - POST   /api/code/ingest-git  → Shallow clone a public Git repo URL and index source code
-  - POST   /api/code/upload-zip  → Upload and index a repository .zip file
-  - GET    /api/code/repos       → List all indexed repositories
-  - DELETE /api/code/repos/{id}  → Delete repository across SQLite, ChromaDB, and disk
-  - POST   /api/code/query       → Query code architecture & implementation with line citations
-
-WHY DEDICATED CODE ENDPOINTS?
-  Code search requires different input parameters (e.g. Git URLs, branch names, path filters)
-  and produces different responses (exact line numbers, function signatures, file paths)
-  than document RAG. Separating `/api/code` from `/api/documents` ensures a clean,
-  extensible REST API interface.
-"""
-
 import shutil
+import uuid
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 
 from app.models.schemas import (
+    BlobIngestRequest,
     RepoIngestGitRequest,
     RepoResponse,
     RepoListResponse,
@@ -42,6 +27,7 @@ from app.services.document_registry import (
     get_all_repositories,
     get_repository_by_id,
 )
+from app.services.blob_store import download_blob_to
 
 
 router = APIRouter(prefix="/api/code", tags=["Code Intelligence"])
@@ -108,7 +94,6 @@ async def upload_zip_repo_endpoint(
             detail="Only .zip repository archives are supported.",
         )
 
-    # Stream upload to temporary file
     with NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = Path(tmp.name)
@@ -142,6 +127,64 @@ async def upload_zip_repo_endpoint(
         primary_language=result["primary_language"],
         created_at=result["created_at"],
         message=f"Successfully indexed archive '{file.filename}' ({result['chunk_count']} chunks).",
+    )
+
+
+@router.post(
+    "/upload-zip-blob",
+    response_model=RepoResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Ingest a repository .zip uploaded to Vercel Blob",
+    description=(
+        "Serverless variant of /upload-zip. The browser PUTs the .zip to Vercel Blob "
+        "(bypassing the 4.5MB function request-body limit), then posts {blob_url, "
+        "filename} here. Downloads the archive and indexes it like a normal upload."
+    ),
+)
+async def upload_zip_repo_from_blob_endpoint(
+    request: BlobIngestRequest,
+    user: User = Depends(get_current_user),
+) -> RepoResponse:
+    if not request.filename.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only .zip repository archives are supported.",
+        )
+
+    tmp_path = Path(settings.repo_dir) / f"blob-{uuid.uuid4().hex}.zip"
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        download_blob_to(request.blob_url, tmp_path)
+        result = ingest_zip_repository(
+            zip_path=tmp_path,
+            original_filename=Path(request.filename).name,
+            owner_id=user.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract and index repository: {str(e)}",
+        )
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return RepoResponse(
+        repo_id=result["repo_id"],
+        name=result["name"],
+        clone_url=result["clone_url"],
+        commit_hash=result["commit_hash"],
+        file_count=result["file_count"],
+        chunk_count=result["chunk_count"],
+        primary_language=result["primary_language"],
+        created_at=result["created_at"],
+        message=f"Successfully indexed archive '{request.filename}' ({result['chunk_count']} chunks).",
     )
 
 
@@ -251,7 +294,6 @@ async def query_code_endpoint(
         )
         for c in result["sources"]
     ]
-
     return CodeQueryResponse(
         answer=result["answer"],
         sources=sources,

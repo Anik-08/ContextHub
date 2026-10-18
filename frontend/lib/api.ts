@@ -57,7 +57,6 @@ export async function api<T>(
       const payload = await response.json();
       if (payload?.detail) detail = String(payload.detail);
     } catch {
-      // response body was not JSON — keep the fallback message
     }
     throw new ApiClientError(response.status, detail);
   }
@@ -99,7 +98,6 @@ export async function apiForm<T>(
       const payload = await response.json();
       if (payload?.detail) detail = String(payload.detail);
     } catch {
-      // response body was not JSON — keep the fallback message
     }
     throw new ApiClientError(response.status, detail);
   }

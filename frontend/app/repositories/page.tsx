@@ -13,7 +13,8 @@ import {
   Spinner,
   formatDate,
 } from "@/components/ui";
-import { api, apiForm, ApiClientError } from "@/lib/api";
+import { upload as uploadToBlob } from "@vercel/blob/client";
+import { api, ApiClientError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { RepoListResponse, RepoRecord, DeleteRepoResponse } from "@/lib/types";
 
@@ -227,11 +228,18 @@ function AddRepoPanel({
   const uploadZip = async (file: File) => {
     setError(null);
     setIngesting(true);
-    setBusyMessage("Extracting archive and generating embeddings…");
-    const form = new FormData();
-    form.append("file", file);
+    setBusyMessage("Uploading archive…");
     try {
-      await apiForm("/api/code/upload-zip", form, token);
+      const blob = await uploadToBlob(file.name, file, {
+        access: "private",
+        handleUploadUrl: "/api/upload",
+      });
+      setBusyMessage("Extracting archive and generating embeddings…");
+      await api("/api/code/upload-zip-blob", {
+        method: "POST",
+        body: { blob_url: blob.url, filename: file.name },
+        token,
+      });
       onAdded();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.detail : "Zip upload failed.");

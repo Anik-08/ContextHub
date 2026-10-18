@@ -149,12 +149,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-full bg-zinc-950">
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-white/5 bg-zinc-950 lg:block">
           {sidebarContent}
         </aside>
 
-        {/* Mobile sidebar */}
         {sidebarOpen && (
           <div className="fixed inset-0 z-40 lg:hidden">
             <div
@@ -168,7 +166,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
 
         <div className="flex w-full flex-col lg:pl-64">
-          {/* Top bar */}
           <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-white/5 bg-zinc-950/80 px-4 backdrop-blur lg:px-8">
             <button
               onClick={() => setSidebarOpen(true)}

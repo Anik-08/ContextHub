@@ -13,7 +13,8 @@ import {
   formatBytes,
   formatDate,
 } from "@/components/ui";
-import { api, apiForm, ApiClientError } from "@/lib/api";
+import { upload as uploadToBlob } from "@vercel/blob/client";
+import { api, ApiClientError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type {
   DocumentListResponse,
@@ -200,18 +201,20 @@ function UploadCard({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const upload = async (file: File) => {
+  const uploadFile = async (file: File) => {
     setError(null);
     setMessage(null);
     setUploading(true);
-    const form = new FormData();
-    form.append("file", file);
     try {
-      const res = await apiForm<DocumentUploadResponse>(
-        "/api/documents/upload",
-        form,
+      const blob = await uploadToBlob(file.name, file, {
+        access: "private",
+        handleUploadUrl: "/api/upload",
+      });
+      const res = await api<DocumentUploadResponse>("/api/documents/upload-blob", {
+        method: "POST",
+        body: { blob_url: blob.url, filename: file.name },
         token,
-      );
+      });
       setMessage(res.message);
       onUploaded(res as unknown as DocumentRecord);
     } catch (err) {
@@ -234,7 +237,7 @@ function UploadCard({
           e.preventDefault();
           setDragOver(false);
           const file = e.dataTransfer.files?.[0];
-          if (file) void upload(file);
+          if (file) void uploadFile(file);
         }}
         onClick={() => inputRef.current?.click()}
         className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors ${
@@ -250,7 +253,7 @@ function UploadCard({
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) void upload(file);
+            if (file) void uploadFile(file);
           }}
         />
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300 ring-1 ring-inset ring-indigo-500/20">

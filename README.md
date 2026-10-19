@@ -120,7 +120,7 @@ flowchart TB
 ### Option A — Docker Compose (recommended)
 
 ```bash
-git clone <repo-url> ContextHub
+git clone <repo-url> 
 cd ContextHub
 
 # Create a root .env (read by docker-compose.yml)
